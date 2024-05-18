@@ -1,12 +1,14 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:get/get.dart';
 import 'package:taskmanager/components/bold_text.dart';
 import '../components/consts.dart';
 import '../components/reusabletextformfield.dart';
+import '../components/notification_service.dart';
 
 class TaskFormScreen extends StatefulWidget {
   const TaskFormScreen({super.key});
@@ -20,7 +22,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
   late TextEditingController _descriptionController;
   late TextEditingController _durationController;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  final NotificationService _notificationService = NotificationService();
   DateTime? _deadline;
   String _deadlineText = '';
 
@@ -30,6 +32,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     _titleController = TextEditingController();
     _descriptionController = TextEditingController();
     _durationController = TextEditingController();
+    _notificationService.initNotificationSettings();
   }
 
   @override
@@ -124,7 +127,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
 
   Future<void> _saveTask() async {
     try {
-      await _firestore.collection('tasks').add({
+      DocumentReference docRef = await _firestore.collection('tasks').add({
         'title': _titleController.text,
         'description': _descriptionController.text,
         'deadline': _deadline,
@@ -132,22 +135,23 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
         'status': 'Incomplete',
         'name': FirebaseAuth.instance.currentUser!.displayName,
       });
+
+      if (_deadline != null) {
+        _notificationService.scheduleNotification(
+          id: docRef.id.hashCode,
+          title: _titleController.text,
+          body: _descriptionController.text,
+          scheduledNotificationDateTime: _deadline!,
+        );
+        logger.i("Notification scheduled at $_deadline");
+      }
     } catch (e) {
-      print('Error saving task: $e');
+      logger.i('Error saving task: $e');
     }
   }
 
   Future<void> _sendNotification(String message) async {
-    try {
-      await _firebaseMessaging.requestPermission();
-      String? token = await _firebaseMessaging.getToken();
-      await _firestore.collection('notifications').add({
-        'token': token,
-        'message': message,
-      });
-    } catch (e) {
-      print('Error sending notification: $e');
-    }
+    // Implement the logic to send a notification
   }
 
   Future<DateTime?> selectDateTime(BuildContext context) async {
